@@ -13,20 +13,19 @@ connectDB();
 
 const app = express();
 
-// Middleware
-app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    process.env.CLIENT_URL
-  ],
-  credentials: true
-}));
+// Allowed frontend origins
+const allowedOrigins = [
+  "http://localhost:5173",
+  process.env.CLIENT_URL
+].filter(Boolean);
 
+// Middleware
 app.use(cors({
   origin: allowedOrigins,
   credentials: true
 }));
-app.use(express.json()); // Allow passing JSON data in the body
+
+app.use(express.json());
 
 // Routes
 app.use("/api/auth", authRoutes);
