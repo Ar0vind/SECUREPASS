@@ -1,4 +1,4 @@
-export const API_URL = 'http://localhost:5000/api';
+export const API_URL = import.meta.env.VITE_API_URL;
 
 /**
  * Records an activity event (a breach check or a password generation) to
