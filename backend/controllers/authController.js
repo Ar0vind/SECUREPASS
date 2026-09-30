@@ -120,29 +120,46 @@ const forgotPassword = async (req, res) => {
       .update(rawToken)
       .digest("hex");
 
+    // The reset token is saved regardless of whether the email step
+    // succeeds — {validateBeforeSave:false} is a defensive no-op here since
+    // we're only touching the two reset fields, not user-provided data.
     user.resetPasswordToken = hashedToken;
     user.resetPasswordExpires = Date.now() + RESET_TOKEN_EXPIRES_MINUTES * 60 * 1000;
-    await user.save();
+    await user.save({ validateBeforeSave: false });
 
     const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
     const resetUrl = `${clientUrl}/reset-password?token=${rawToken}`;
 
-    await sendEmail({
-      to: user.email,
-      subject: "Reset your SecurePass password",
-      text:
-        `We received a request to reset your SecurePass password.\n\n` +
-        `Reset it here (expires in ${RESET_TOKEN_EXPIRES_MINUTES} minutes):\n${resetUrl}\n\n` +
-        `If you didn't request this, you can safely ignore this email.`,
-      html:
-        `<p>We received a request to reset your SecurePass password.</p>` +
-        `<p><a href="${resetUrl}">Click here to reset your password</a> ` +
-        `(expires in ${RESET_TOKEN_EXPIRES_MINUTES} minutes).</p>` +
-        `<p>If you didn't request this, you can safely ignore this email.</p>`,
-    });
+    // Sending the email is deliberately isolated from the rest of the
+    // handler: if SMTP hiccups (auth error, throttling, timeout...), we log
+    // it server-side for debugging but still return the same generic
+    // response below — a delivery failure should never surface as a 500
+    // to the client, and it should never block a retry.
+    try {
+      await sendEmail({
+        to: user.email,
+        subject: "Reset your SecurePass password",
+        text:
+          `We received a request to reset your SecurePass password.\n\n` +
+          `Reset it here (expires in ${RESET_TOKEN_EXPIRES_MINUTES} minutes):\n${resetUrl}\n\n` +
+          `If you didn't request this, you can safely ignore this email.`,
+        html:
+          `<p>We received a request to reset your SecurePass password.</p>` +
+          `<p><a href="${resetUrl}">Click here to reset your password</a> ` +
+          `(expires in ${RESET_TOKEN_EXPIRES_MINUTES} minutes).</p>` +
+          `<p>If you didn't request this, you can safely ignore this email.</p>`,
+      });
+    } catch (emailError) {
+      console.error(
+        `[forgotPassword] sendEmail failed for ${user.email}:`,
+        emailError,
+      );
+      // Deliberately no error response here — see comment above.
+    }
 
     res.status(200).json(genericResponse);
   } catch (error) {
+    console.error("[forgotPassword] Unexpected error:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
@@ -186,6 +203,7 @@ const resetPassword = async (req, res) => {
 
     res.status(200).json({ message: "Password reset successful. You can now log in." });
   } catch (error) {
+    console.error("[resetPassword] Unexpected error:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
