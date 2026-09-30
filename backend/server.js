@@ -28,8 +28,8 @@ app.use(cors({
 app.use(express.json());
 
 // Routes
-app.use("/api/auth", authRoutes);
-app.use("/api/history", historyRoutes);
+app.use("/auth", authRoutes);
+app.use("/history", historyRoutes);
 
 // Basic route for testing
 app.get("/", (req, res) => {
